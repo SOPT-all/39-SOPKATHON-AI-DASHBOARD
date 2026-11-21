@@ -16,7 +16,7 @@ argument-hint: "스펙 이슈 번호 (생략하면 현재 브랜치 feat/#N에�
    git diff main...HEAD --stat
    git diff main...HEAD
    ```
-   `AGENTS.md`를 읽는다. 컨벤션의 단일 출처다. 여기서 규칙을 새로 만들지 않는다.
+   `AGENTS.md`와 `docs/CODE_CONVENTION.md`(있으면)를 읽는다. 컨벤션의 단일 출처다. 여기서 규칙을 새로 만들지 않는다. 둘이 어긋나면 `docs/CODE_CONVENTION.md`를 우선하고 어긋남 자체를 권장 항목으로 적는다.
 2. **빌드·테스트**: `./gradlew test`를 돌려 결과를 기록한다. 실패하면 첫 항목으로 올린다.
 3. **체크리스트** — 각 항목을 `통과 / 위반 / 해당 없음`으로 판정하고, 위반은 `파일:줄`과 이유를 적는다.
    - **구조**: 패키지가 `domain/<도메인>/{controller,service,repository,entity,dto,code}`를 따르는가. Controller가 Repository를 직접 부르지 않는가. 다른 도메인은 Service를 통해 접근하는가. 순환 의존이 없는가.
