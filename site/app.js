@@ -12,19 +12,19 @@ const stageLabel = (key) => STAGES[stageIndex(key)].label;
 const GUIDE = `
 ## 이 대시보드는
 기능 하나가 **스펙 → 기획자 컨펌 → 구현 → 리뷰 → PR → 개발자 머지** 순서로 어디까지 왔는지 보여 줍니다.
-스펙은 이 대시보드에 저장되고, 구현이 시작되면 서버 레포의 GitHub 이슈·PR 상태가 함께 표시됩니다.
+스펙은 대시보드 레포의 \`specs\` 브랜치(Git)에 저장되고, 구현이 시작되면 서버 레포의 GitHub 이슈·PR 상태가 함께 표시됩니다.
 
 ## 로그인
 - **개발자**: GitHub 로그인. 허용된 3명(KateteDeveloper, joobogyeong, eun-seoo)만 들어올 수 있습니다.
 - **기획자**: 토큰 없이 이름만 입력해 입장. 스펙을 읽고 승인·수정 요청을 남길 수 있습니다.
 
 ## 스펙 만들기
-개발자는 기능 목록 위쪽의 **+ 스펙 추가**를 누릅니다. PRD 항목을 고르고 내용을 적으면 \`/spec\` 프롬프트가 만들어집니다. **Claude Code용 복사** 또는 **Codex용 복사**를 눌러 붙여넣으면 AI가 \`docs/specs/<id>.md\` 파일로 스펙을 씁니다. 그 파일을 **스펙 업로드**로 올리면 기획자가 볼 수 있습니다. GitHub 이슈는 \`/code\`가 만듭니다.
+개발자는 기능 목록 위쪽의 **+ 스펙 추가**를 누릅니다. PRD 항목을 고르고 내용을 적으면 \`/spec\` 프롬프트가 만들어집니다. **Claude Code용 복사** 또는 **Codex용 복사**를 눌러 붙여넣으면 AI가 스펙을 쓰고, 개발자가 "대시보드에 올릴까요?"에 승인하면 바로 올라갑니다(약 30초 뒤 반영). GitHub 이슈는 \`/code\`가 만듭니다.
 
 ## 단계별 커맨드 (Claude Code · Codex 공통)
 | 단계 | 커맨드 | 누가 | 하는 일 |
 | --- | --- | --- | --- |
-| 1 | \`/spec 기능 설명\` | 개발자 | PRD를 바탕으로 스펙 파일을 쓴다. 대시보드 **스펙 업로드**로 올린다 |
+| 1 | \`/spec 기능 설명\` | 개발자 | PRD를 바탕으로 스펙을 쓰고, 승인하면 대시보드(Git specs 브랜치)에 올린다 |
 | - | 컨펌 | **기획자** | 대시보드에서 스펙을 읽고 **승인** 또는 **수정 요청**(이유 필수). 로그인은 이름만 입력 |
 | 2 | \`/code 스펙ID\` | 개발자 | 승인된 스펙으로 **GitHub 이슈와 브랜치를 만들고** 구현·테스트·커밋, **PR 초안**을 이슈에 작성 |
 | 3 | \`/review 스펙ID\` | 개발자 | 구현이 스펙에 맞는지, 컨벤션·**오버엔지니어링**은 아닌지 점검, 결과를 이슈에 기록 |
@@ -35,7 +35,7 @@ Claude Code에서는 \`/spec\`, Codex에서는 \`$spec\`(또는 \`/skills\`에�
 ## 상태 배지
 | 배지 | 뜻 |
 | --- | --- |
-| 스펙 작성 | 스펙이 업로드되어 기획자 컨펌을 기다림 (아직 이슈 없음) |
+| 스펙 작성 | 스펙이 올라와 기획자 컨펌을 기다림 (아직 이슈 없음) |
 | 기획 컨펌 | 승인됨. \`/code\` 가능 |
 | 구현 | \`/code\`가 이슈를 만들고 브랜치에서 구현 중 |
 | 리뷰 | \`/review\` 결과가 이슈에 기록됨 |
@@ -58,7 +58,7 @@ async function sha256(text) {
 let data = { features: [] };
 let session = null;      // { role: 'developer' | 'planner', name }
 let approvals = {};      // 스펙 id → 컨펌 기록(Firestore)
-let specs = [];          // Firestore에 올라온 스펙 [{ id, title, body, by, at }]
+let specs = [];          // 대시보드 레포 specs 브랜치의 스펙 [{ id, title, body }]
 let rawIssues = [];      // data.json의 GitHub 이슈(/code가 만든 것)
 let stageFilter = 'all'; // 'all' | 단계 key | 'changes'
 let quick = { pr: false, mine: false };
@@ -108,12 +108,12 @@ function renderRows() {
         <td>${esc(f.assignees.join(', ') || '-')}</td>
         <td>${f.pr ? `<a href="${safeUrl(f.pr.url)}" target="_blank" rel="noopener">#${f.pr.number}</a>` : '-'}</td>
       </tr>`).join('')
-    : `<tr><td colspan="4" class="empty">${data.features.length ? '조건에 맞는 기능이 없습니다.' : '아직 기능이 없습니다. <code>/spec 기능 설명</code>으로 스펙을 만들고 <strong>스펙 업로드</strong>로 올려 보세요.'}</td></tr>`;
+    : `<tr><td colspan="4" class="empty">${data.features.length ? '조건에 맞는 기능이 없습니다.' : '아직 기능이 없습니다. <code>/spec 기능 설명</code>으로 스펙을 만들어 올려 보세요.'}</td></tr>`;
 }
 
 // ---------- 상세 ----------
 function nextAction(f) {
-  if (f.changesRequested) return '기획자가 수정을 요청했습니다. 코멘트를 확인하고 <code>/spec ' + f.id + '</code>로 개정해 다시 업로드하세요.';
+  if (f.changesRequested) return '기획자가 수정을 요청했습니다. 코멘트를 확인하고 <code>/spec ' + f.id + '</code>로 개정해 다시 올리세요.';
   return {
     spec: '기획자 컨펌을 기다리고 있습니다. 아래 스펙을 읽고 <strong>승인</strong> 또는 <strong>수정 요청</strong>을 눌러 주세요.',
     approved: '승인되었습니다. <code>/code ' + f.id + '</code>로 이슈를 만들고 구현을 시작하세요.',
@@ -219,18 +219,17 @@ function mergeFeatures() {
 
 async function reload(fetchData = true) {
   if (fetchData) {
-    try { data = await (await fetch('data.json', { cache: 'no-cache' })).json(); rawIssues = data.features || []; } catch { /* data.json 이 없으면 이슈 없음 */ }
+    try { data = await (await fetch('data.json', { cache: 'no-cache' })).json(); rawIssues = data.features || []; specs = data.specs || []; } catch { /* data.json 이 없으면 이슈 없음 */ }
   }
   try { approvals = await Auth.loadApprovals(); } catch { approvals = {}; }
-  try { specs = await Auth.loadSpecs(); } catch { specs = []; }
-  data.features = mergeFeatures();
+    data.features = mergeFeatures();
   await applyApprovals();
   render();
 }
 
 async function init() {
   await reload();
-  $('add-spec').hidden = $('upload-spec').hidden = session.role !== 'developer'; // 프롬프트를 실행하는 쪽은 개발자
+  $('add-spec').hidden = session.role !== 'developer'; // 프롬프트를 실행하는 쪽은 개발자
   $('who').innerHTML = `<i>${esc(session.name.slice(0, 1).toUpperCase())}</i>${esc(session.name)} · ${session.role === 'developer' ? '개발자' : '기획자'}`;
   $('repo').innerHTML = data.repo ? `<a href="https://github.com/${esc(data.repo)}" target="_blank" rel="noopener">${esc(data.repo)}</a>` : '';
   $('foot').textContent = data.generatedAt ? `마지막 갱신 ${new Date(data.generatedAt).toLocaleString('ko-KR')}` : '';
@@ -292,41 +291,6 @@ async function copyPrompt(prefix) {
 // ---------- 이벤트 ----------
 $('add-spec').addEventListener('click', openSpecDialog);
 
-// ---------- 스펙 업로드 ----------
-const slugify = (s) => s.toLowerCase().replace(/\.md$/, '').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-
-function openUploadDialog() {
-  for (const id of ['file', 'id', 'title', 'body']) $('upload-' + id).value = '';
-  $('upload-msg').textContent = '';
-  $('upload-dialog').showModal();
-}
-
-$('upload-spec').addEventListener('click', openUploadDialog);
-$('upload-file').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  $('upload-body').value = text;
-  if (!$('upload-id').value) $('upload-id').value = slugify(file.name);
-  if (!$('upload-title').value) $('upload-title').value = (text.match(/^#\s+(.+)$/m)?.[1] || '').trim();
-});
-$('upload-go').addEventListener('click', async () => {
-  const id = $('upload-id').value.trim();
-  const title = $('upload-title').value.trim();
-  const body = $('upload-body').value.trim();
-  const msg = $('upload-msg');
-  if (!/^[a-z0-9-]{1,40}$/.test(id)) { msg.textContent = '스펙 ID는 영문 소문자·숫자·하이픈 40자 이내여야 합니다.'; return; }
-  if (!title || !body) { msg.textContent = '제목과 본문을 채워 주세요.'; return; }
-  msg.textContent = '업로드 중…';
-  try {
-    await Auth.uploadSpec(id, session, title, body, '');
-    await reload(false);
-    selected = id; location.hash = encodeURIComponent(id); render();
-    $('upload-dialog').close();
-  } catch (e) {
-    msg.textContent = '업로드하지 못했습니다. 개발자 로그인인지 확인하세요. (' + (e.code || e.message) + ')';
-  }
-});
 $('spec-prd').addEventListener('change', () => {
   const p = specPrd[Number($('spec-prd').value)];
   if (p) { $('spec-name').value = p.name; $('spec-desc').value = p.desc; }

@@ -56,7 +56,6 @@
         <section class="card listing">
           <div class="searchbar">
             <input id="search" type="search" placeholder="기능 검색 (제목 / 번호)">
-            <button class="btn ghost" id="upload-spec" hidden>스펙 업로드</button>
             <button class="btn" id="add-spec" hidden>+ 스펙 추가</button>
           </div>
           <div class="tablewrap">
@@ -97,30 +96,6 @@
         <button value="close" class="btn ghost">닫기</button>
       </div>
       <p class="sub" id="spec-msg"></p>
-    </form>
-  </dialog>
-
-  <dialog id="upload-dialog" class="modal">
-    <form method="dialog">
-      <h2>스펙 업로드</h2>
-      <p class="sub"><code>/spec</code>이 만든 <code>docs/specs/*.md</code> 파일을 고르거나 내용을 붙여넣으세요. 같은 ID로 다시 올리면 스펙이 개정되고, 이전 승인은 "재작성 필요"가 됩니다.</p>
-      <label>파일 선택
-        <input id="upload-file" type="file" accept=".md,text/markdown,text/plain">
-      </label>
-      <label><span>스펙 ID <span class="req">필수</span></span>
-        <input id="upload-id" maxlength="40" placeholder="예: login-api (영문 소문자·숫자·하이픈)">
-      </label>
-      <label><span>제목 <span class="req">필수</span></span>
-        <input id="upload-title" maxlength="100" placeholder="예: 로그인 API">
-      </label>
-      <label>스펙 본문
-        <textarea id="upload-body" rows="10" maxlength="30000" placeholder="/spec이 만든 마크다운"></textarea>
-      </label>
-      <div class="actions">
-        <button type="button" class="btn" id="upload-go">업로드</button>
-        <button value="close" class="btn ghost">닫기</button>
-      </div>
-      <p class="sub" id="upload-msg"></p>
     </form>
   </dialog>
 

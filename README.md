@@ -5,7 +5,7 @@
 
 ```text
 PRD ─▶ /spec ─▶ [기획자 컨펌] ─▶ /code ─▶ /review ─▶ /pr ─▶ [개발자 머지 = 끝]
-        스펙 파일→업로드   승인        이슈·브랜치+구현+PR 초안   맞는지·오버엔지니어링   PR 생성     Merge Commit
+        스펙 작성→Git 업로드  승인        이슈·브랜치+구현+PR 초안   맞는지·오버엔지니어링   PR 생성     Merge Commit
 ```
 
 ## 동작 방식 (서버 없음)
@@ -13,7 +13,7 @@ PRD ─▶ /spec ─▶ [기획자 컨펌] ─▶ /code ─▶ /review ─▶ /p
 | 구성 | 설명 |
 | --- | --- |
 | 스킬 `kit/skills` | `/spec /code /review /pr`. Claude Code와 Codex가 같은 `SKILL.md`를 읽습니다 |
-| 상태 저장소 | 스펙은 대시보드(Firestore `specs/{id}`), 구현 단계부터는 서버 레포의 **GitHub 이슈와 PR**(상태는 `stage:*` 라벨). 이슈는 `/code`가 만들고 본문 마커 `sopkathon:spec:<id>`로 스펙과 이어짐 |
+| 상태 저장소 | 스펙은 대시보드 레포의 `specs` 브랜치(`specs/<id>.md`, `/spec`이 gh로 커밋), 구현 단계부터는 서버 레포의 **GitHub 이슈와 PR**(상태는 `stage:*` 라벨). 이슈는 `/code`가 만들고 본문 마커 `sopkathon:spec:<id>`로 스펙과 이어짐 |
 | 대시보드 `site/` | 10분마다 Actions가 이슈·PR을 읽어 `data.json`을 만들고 GitHub Pages로 배포 |
 | 로그인 | Firebase Auth. **개발자**는 GitHub 로그인(KateteDeveloper, joobogyeong, eun-seoo 3명만), **기획자**는 이름만 입력(익명 로그인, 토큰 불필요) |
 | 기획자 컨펌 | 대시보드에서 **승인 / 수정 요청**. Firestore `approvals/{스펙ID}`에 저장되고 `/code`가 읽어 게이트로 씀 |
@@ -35,7 +35,7 @@ node scripts/install-kit.mjs ../39-SOPKATHON-SERVER-iOS1
 
 ## 2. 사용 흐름
 
-1. 개발자: `/spec 투표 생성 기능` → 스펙 미리보기 확인 후 `docs/specs/<id>.md` 저장 → 대시보드 **스펙 업로드**로 올림 (GitHub 이슈는 아직 안 만듦)
+1. 개발자: `/spec 투표 생성 기능` → 스펙 미리보기 → "대시보드에 올릴까요?" 승인 → 대시보드 레포 `specs` 브랜치에 커밋 (GitHub 이슈는 아직 안 만듦, 약 30초 뒤 대시보드 반영)
 2. 기획자: 대시보드에 이름으로 입장 → 스펙을 읽고 **승인** 또는 **수정 요청**(이유 필수)
 3. 개발자: `/code <스펙ID>` — **GitHub 이슈와 `feat/#N` 브랜치를 만들고** 구현, **PR 초안**까지 이슈에 작성
 4. 개발자: `/review <스펙ID>` — 구현이 스펙에 맞는지·컨벤션·**오버엔지니어링**인지 점검 (필요하면 줄이는 방향으로 수정)
