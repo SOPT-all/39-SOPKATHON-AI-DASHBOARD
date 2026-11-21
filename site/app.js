@@ -1,17 +1,17 @@
 const STAGES = [
-  { key: 'spec', label: '스펙 작성', hint: '기획자 컨펌 대기' },
-  { key: 'approved', label: '기획 컨펌', hint: '구현 가능' },
-  { key: 'coding', label: '구현', hint: '/code' },
-  { key: 'review', label: '리뷰', hint: '/review' },
-  { key: 'pr', label: 'PR', hint: '개발자 컨펌 대기' },
-  { key: 'done', label: '완료', hint: '머지됨' },
+  { key: 'spec', label: '스펙 작성', list: '스펙 작성 (컨펌 대기)', hint: '컨펌 대기' },
+  { key: 'approved', label: '기획 컨펌', list: '기획 컨펌 완료', hint: '구현 가능' },
+  { key: 'coding', label: '구현', list: '구현중', hint: '/code' },
+  { key: 'review', label: '리뷰', list: '리뷰', hint: '/review' },
+  { key: 'pr', label: 'PR', list: 'PR 열림', hint: '개발자 컨펌' },
+  { key: 'done', label: '완료', list: '머지됨 (완료)', hint: '머지됨' },
 ];
 const stageIndex = (key) => STAGES.findIndex((s) => s.key === key);
 const stageLabel = (key) => STAGES[stageIndex(key)].label;
 
 const GUIDE = `
 ## 이 대시보드는
-기능 하나가 **스펙 → 기획자 컨펌 → 구현 → 리뷰 → PR → 개발자 컨펌** 순서로 어디까지 왔는지 보여 줍니다.
+기능 하나가 **스펙 → 기획자 컨펌 → 구현 → 리뷰 → PR → 개발자 머지** 순서로 어디까지 왔는지 보여 줍니다.
 데이터는 서버 레포의 GitHub 이슈·PR에서 읽어 오며 몇 분마다 갱신됩니다.
 
 ## 로그인
@@ -36,8 +36,10 @@ Claude Code에서는 \`/spec\`, Codex에서는 \`$spec\`(또는 \`/skills\`에�
 | 기획 컨펌 | 승인됨. \`/code\` 가능 |
 | 구현 | 브랜치에서 구현 중 |
 | 리뷰 | \`/review\` 결과가 이슈에 기록됨 |
-| PR | PR이 열려 개발자 컨펌을 기다림 |
+| PR | PR이 열려 개발자 머지를 기다림 |
 | 완료 | PR이 머지되고 이슈가 닫힘 |
+| 수정 요청 | 기획자가 스펙 수정을 요청함 |
+| 스펙 재작성 필요 | 승인 이후 스펙이 바뀌어 다시 승인이 필요함 |
 `;
 
 const $ = (id) => document.getElementById(id);
@@ -53,27 +55,60 @@ async function sha256(text) {
 let data = { features: [] };
 let session = null;      // { role: 'developer' | 'planner', name }
 let approvals = {};      // 이슈 번호 → 컨펌 기록(Firestore)
-let filter = 'all';
+let stageFilter = 'all'; // 'all' | 단계 key | 'changes'
+let quick = { pr: false, mine: false };
+let query = '';
 let selected = Number(location.hash.slice(1)) || null;
 
-function renderFilters() {
-  const counts = Object.fromEntries(STAGES.map((s) => [s.key, data.features.filter((f) => f.stage === s.key).length]));
-  const items = [['all', `전체 ${data.features.length}`], ...STAGES.map((s) => [s.key, `${s.label} ${counts[s.key]}`])];
-  $('filters').innerHTML = items.map(([k, l]) => `<button data-f="${k}" class="${filter === k ? 'on' : ''}">${esc(l)}</button>`).join('');
+// ---------- 목록 ----------
+function visibleFeatures() {
+  const q = query.trim().toLowerCase();
+  return data.features.filter((f) =>
+    (stageFilter === 'all' || (stageFilter === 'changes' ? f.changesRequested : f.stage === stageFilter))
+    && (!quick.pr || f.pr)
+    && (!quick.mine || (session && f.assignees.includes(session.name)))
+    && (!q || f.title.toLowerCase().includes(q) || String(f.number).includes(q)));
 }
 
-function renderList() {
-  const rows = data.features.filter((f) => filter === 'all' || f.stage === filter);
-  $('list').innerHTML = rows.length
-    ? rows.map((f) => `<li data-n="${f.number}" class="${f.number === selected ? 'on' : ''}">
-        <div class="t">${esc(f.title)}</div>
-        <div class="m"><span class="badge ${f.stage}">${esc(stageLabel(f.stage))}</span>#${f.number}${f.changesRequested ? ' · 수정 요청' : ''}${f.assignees.length ? ' · ' + esc(f.assignees.join(', ')) : ''}</div>
-      </li>`).join('')
-    : '<li class="empty">해당하는 기능이 없습니다. <code>/spec</code>으로 시작해 보세요.</li>';
+function badges(f) {
+  const out = [`<span class="badge ${f.stage}">${esc(stageLabel(f.stage))}</span>`];
+  if (f.changesRequested) out.push('<span class="badge changes">수정 요청</span>');
+  if (f.stale) out.push('<span class="badge stale">스펙 재작성 필요</span>');
+  return `<div class="badges">${out.join('')}</div>`;
 }
 
+function renderStats() {
+  const n = (...keys) => data.features.filter((f) => keys.includes(f.stage)).length;
+  const cards = [
+    ['전체', data.features.length, ''], ['컨펌 대기', n('spec'), 'amber'], ['컨펌 완료', n('approved'), 'teal'],
+    ['구현·리뷰', n('coding', 'review'), 'blue'], ['PR 열림', n('pr'), 'indigo'], ['완료', n('done'), 'green'],
+  ];
+  $('stats').innerHTML = cards.map(([label, count, tone]) => `<div class="stat ${tone}"><b>${count}</b><span>${label}</span></div>`).join('');
+}
+
+function renderSide() {
+  const items = [['all', '전체', data.features.length], ...STAGES.map((s) => [s.key, s.list, data.features.filter((f) => f.stage === s.key).length]),
+    ['changes', '수정 요청', data.features.filter((f) => f.changesRequested).length]];
+  $('pipe').innerHTML = items.map(([k, l, c]) => `<li data-f="${k}" class="${stageFilter === k ? 'on' : ''}"><span>${esc(l)}</span><em>${c}</em></li>`).join('');
+  $('quick').innerHTML = `<button data-q="pr" class="${quick.pr ? 'on' : ''}">PR 연결</button>
+    <button data-q="mine" class="${quick.mine ? 'on' : ''}">내 담당</button>`;
+}
+
+function renderRows() {
+  const rows = visibleFeatures();
+  $('rows').innerHTML = rows.length
+    ? rows.map((f) => `<tr data-n="${f.number}" class="${f.number === selected ? 'on' : ''}">
+        <td><div class="t">${esc(f.title)}</div><div class="slug">#${f.number}</div></td>
+        <td>${badges(f)}</td>
+        <td>${esc(f.assignees.join(', ') || '-')}</td>
+        <td>${f.pr ? `<a href="${safeUrl(f.pr.url)}" target="_blank" rel="noopener">#${f.pr.number}</a>` : '-'}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="4" class="empty">${data.features.length ? '조건에 맞는 기능이 없습니다.' : '아직 기능이 없습니다. <code>/spec 기능 설명</code>으로 시작해 보세요.'}</td></tr>`;
+}
+
+// ---------- 상세 ----------
 function nextAction(f) {
-  if (f.changesRequested) return '기획자가 수정을 요청했습니다. 이슈 코멘트를 확인하고 <code>/spec ' + f.number + '</code>로 개정하세요.';
+  if (f.changesRequested) return '기획자가 수정을 요청했습니다. 코멘트를 확인하고 <code>/spec ' + f.number + '</code>로 개정하세요.';
   return {
     spec: '기획자 컨펌을 기다리고 있습니다. 아래 스펙을 읽고 <strong>승인</strong> 또는 <strong>수정 요청</strong>을 눌러 주세요.',
     approved: '승인되었습니다. <code>/code ' + f.number + '</code>로 구현을 시작하세요.',
@@ -116,9 +151,7 @@ async function decide(kind) {
   try {
     if (kind === 'reset') await Auth.reset(f.number);
     else await Auth.decide(f.number, session, kind, comment, await sha256(f.body));
-    approvals = await Auth.loadApprovals();
-    await applyApprovals();
-    render();
+    await reload(false);
   } catch (e) {
     msg.textContent = '저장하지 못했습니다. 권한이나 네트워크를 확인하세요. (' + (e.code || e.message) + ')';
   }
@@ -126,12 +159,12 @@ async function decide(kind) {
 
 function renderDetail() {
   const f = data.features.find((x) => x.number === selected);
-  if (!f) { $('detail').innerHTML = '<p class="empty">왼쪽에서 기능을 선택하세요.</p>'; return; }
+  if (!f) { $('detail').innerHTML = '<p class="empty">왼쪽 목록에서 기능을 선택하세요.</p>'; return; }
   const cur = stageIndex(f.stage);
-  const steps = STAGES.map((s, i) => `<div class="step ${i < cur || f.stage === 'done' ? 'done' : ''} ${i === cur && f.stage !== 'done' ? 'now' : ''}">${esc(s.label)}<br><small>${esc(s.hint)}</small></div>`).join('');
+  const steps = STAGES.map((s, i) => `<div class="step ${i < cur || f.stage === 'done' ? 'done' : ''} ${i === cur && f.stage !== 'done' ? 'now' : ''}">${esc(s.label)}<small>${esc(s.hint)}</small></div>`).join('');
   const isDevTurn = f.stage === 'pr';
   $('detail').innerHTML = `
-    <h2 style="margin:0">${esc(f.title)} <small style="color:var(--muted)">#${f.number}</small></h2>
+    <h2>${esc(f.title)} <small>#${f.number}</small></h2>
     <div class="steps">${steps}</div>
     <div class="note">${nextAction(f)}</div>
     ${decisionPanel(f)}
@@ -144,13 +177,14 @@ function renderDetail() {
     ${f.review ? `<h2 class="sec">코드 리뷰 결과 · <a href="${safeUrl(f.review.url)}" target="_blank" rel="noopener">코멘트 보기</a></h2><div class="md">${md(f.review.body)}</div>` : ''}`;
 }
 
+function render() { renderStats(); renderSide(); renderRows(); renderDetail(); }
+
 function renderTab(tab) {
-  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('#tabs [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   for (const t of ['features', 'prd', 'guide']) $('view-' + t).hidden = t !== tab;
 }
 
-function render() { renderFilters(); renderList(); renderDetail(); }
-
+// ---------- 데이터 ----------
 // 컨펌 기록을 기능에 합친다. GitHub 라벨은 몇 분 늦게 갱신되므로 Firestore 승인이 있으면 그것을 우선한다.
 async function applyApprovals() {
   for (const f of data.features) {
@@ -162,25 +196,33 @@ async function applyApprovals() {
   }
 }
 
-async function init() {
-  try {
-    data = await (await fetch('data.json', { cache: 'no-cache' })).json();
-  } catch { /* data.json 이 없으면 빈 화면으로 시작 */ }
+async function reload(fetchData = true) {
+  if (fetchData) {
+    try { data = await (await fetch('data.json', { cache: 'no-cache' })).json(); } catch { /* data.json 이 없으면 빈 화면 */ }
+  }
   try { approvals = await Auth.loadApprovals(); } catch { approvals = {}; }
   await applyApprovals();
-  $('who').textContent = `${session.name} · ${session.role === 'developer' ? '개발자' : '기획자'}`;
-  $('repo').innerHTML = data.repo ? `<a href="https://github.com/${esc(data.repo)}" target="_blank" rel="noopener">${esc(data.repo)}</a>` : '';
-  $('foot').textContent = data.generatedAt ? `마지막 갱신 ${new Date(data.generatedAt).toLocaleString('ko-KR')}` : '';
-  $('prd').className = 'doc md';
-  $('prd').innerHTML = data.prd ? md(data.prd) : '<p class="empty">서버 레포에 <code>docs/prd/prd.md</code>가 없습니다. 템플릿을 설치하고 내용을 채워 주세요.</p>';
-  $('guide').className = 'doc md';
-  $('guide').innerHTML = md(GUIDE);
   render();
 }
 
-$('filters').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { filter = b.dataset.f; render(); } });
-$('list').addEventListener('click', (e) => { const li = e.target.closest('li[data-n]'); if (li) { selected = Number(li.dataset.n); location.hash = selected; render(); } });
+async function init() {
+  await reload();
+  $('who').innerHTML = `<i>${esc(session.name.slice(0, 1).toUpperCase())}</i>${esc(session.name)} · ${session.role === 'developer' ? '개발자' : '기획자'}`;
+  $('repo').innerHTML = data.repo ? `<a href="https://github.com/${esc(data.repo)}" target="_blank" rel="noopener">${esc(data.repo)}</a>` : '';
+  $('foot').textContent = data.generatedAt ? `마지막 갱신 ${new Date(data.generatedAt).toLocaleString('ko-KR')}` : '';
+  $('prd').className = 'card doc md';
+  $('prd').innerHTML = data.prd ? md(data.prd) : '<p class="empty">서버 레포에 <code>docs/prd/prd.md</code>가 없습니다. 템플릿을 설치하고 내용을 채워 주세요.</p>';
+  $('guide').className = 'card doc md';
+  $('guide').innerHTML = md(GUIDE);
+}
+
+// ---------- 이벤트 ----------
+$('pipe').addEventListener('click', (e) => { const li = e.target.closest('li[data-f]'); if (li) { stageFilter = li.dataset.f; render(); } });
+$('quick').addEventListener('click', (e) => { const b = e.target.closest('button[data-q]'); if (b) { quick[b.dataset.q] = !quick[b.dataset.q]; render(); } });
+$('search').addEventListener('input', (e) => { query = e.target.value; renderRows(); });
+$('rows').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-n]'); if (tr) { selected = Number(tr.dataset.n); location.hash = selected; render(); } });
 $('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) renderTab(b.dataset.tab); });
+$('reset').addEventListener('click', () => { stageFilter = 'all'; quick = { pr: false, mine: false }; query = ''; $('search').value = ''; renderTab('features'); render(); });
 $('detail').addEventListener('click', (e) => { const b = e.target.closest('button[data-decide]'); if (b) decide(b.dataset.decide); });
 $('logout').addEventListener('click', () => Auth.logout());
 
