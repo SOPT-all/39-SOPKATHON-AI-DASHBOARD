@@ -30,6 +30,24 @@ function findPull(number) {
   return pulls.find((p) => p.head.ref.startsWith(`feat/#${number}`) || closes.test(p.body ?? ''));
 }
 
+// 스펙은 대시보드 레포의 `specs` 브랜치(specs/<id>.md)에 /spec이 커밋한다. 브랜치나 폴더가 없으면 스펙 없음.
+const dashboardRepo = process.env.GITHUB_REPOSITORY || 'SOPT-all/39-SOPKATHON-AI-DASHBOARD';
+async function dashboardGh(path, accept = 'application/vnd.github+json') {
+  const res = await fetch(`https://api.github.com/repos/${dashboardRepo}${path}`, {
+    headers: { Accept: accept, 'User-Agent': 'ai-dashboard', ...(token && { Authorization: `Bearer ${token}` }) },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub ${res.status} ${path}: ${await res.text()}`);
+  return accept.includes('raw') ? res.text() : res.json();
+}
+const specs = [];
+for (const file of (await dashboardGh('/contents/specs?ref=specs')) ?? []) {
+  const m = file.name.match(/^([a-z0-9-]{1,40})\.md$/);
+  if (!m) continue;
+  const body = await dashboardGh(`/contents/specs/${file.name}?ref=specs`, 'application/vnd.github.raw+json');
+  specs.push({ id: m[1], title: body.match(/^#\s+(.+)$/m)?.[1].trim() ?? m[1], body });
+}
+
 const features = [];
 for (const issue of issues) {
   const labels = issue.labels.map((l) => l.name);
@@ -42,6 +60,8 @@ for (const issue of issues) {
   const review = comments.filter((c) => c.body.startsWith(REVIEW_MARKER)).at(-1);
 
   features.push({
+    // /code가 이슈를 만들 때 본문에 넣는 `<!-- sopkathon:spec:<id> -->` 로 대시보드 스펙과 이어진다.
+    specId: (issue.body ?? '').match(/<!-- sopkathon:spec:([a-z0-9-]+) -->/)?.[1] ?? null,
     number: issue.number,
     title: issue.title,
     body: issue.body ?? '',
@@ -57,6 +77,6 @@ for (const issue of issues) {
 }
 features.sort((a, b) => a.number - b.number);
 
-const out = { generatedAt: new Date().toISOString(), repo, prd, features };
+const out = { generatedAt: new Date().toISOString(), repo, prd, specs, features };
 writeFileSync(join(root, 'site', 'data.json'), JSON.stringify(out, null, 2));
-console.log(`✔ ${repo}: 스펙 ${features.length}개, PRD ${prd ? '있음' : '없음'}`);
+console.log(`✔ ${repo}: 스펙 ${specs.length}개, 이슈 ${features.length}개, PRD ${prd ? '있음' : '없음'}`);

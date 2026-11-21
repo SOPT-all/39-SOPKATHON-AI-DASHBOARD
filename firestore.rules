@@ -16,8 +16,8 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous';
     }
 
-    // 기능(이슈 번호)별 최신 컨펌 결과 1건. 누구나 읽을 수 있다 (스킬이 /code 게이트에서 읽음).
-    match /approvals/{issueNumber} {
+    // 기능(스펙 id)별 최신 컨펌 결과 1건. 누구나 읽을 수 있다 (스킬이 /code 게이트에서 읽음).
+    match /approvals/{specId} {
       allow read: if true;
 
       allow create, update: if (isDeveloper() || isPlanner())
