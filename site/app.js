@@ -18,6 +18,9 @@ const GUIDE = `
 - **개발자**: GitHub 로그인. 허용된 3명(KateteDeveloper, joobogyeong, eun-seoo)만 들어올 수 있습니다.
 - **기획자**: 토큰 없이 이름만 입력해 입장. 스펙을 읽고 승인·수정 요청을 남길 수 있습니다.
 
+## 스펙 만들기
+개발자는 기능 목록 위쪽의 **+ 스펙 추가**를 누릅니다. PRD 항목을 고르고 내용을 적으면 \`/spec\` 프롬프트가 만들어집니다. **Claude Code용 복사** 또는 **Codex용 복사**를 눌러 붙여넣으면 AI가 스펙을 쓰고 이슈로 등록합니다.
+
 ## 단계별 커맨드 (Claude Code · Codex 공통)
 | 단계 | 커맨드 | 누가 | 하는 일 |
 | --- | --- | --- | --- |
@@ -207,6 +210,7 @@ async function reload(fetchData = true) {
 
 async function init() {
   await reload();
+  $('add-spec').hidden = session.role !== 'developer'; // 프롬프트를 실행하는 쪽은 개발자
   $('who').innerHTML = `<i>${esc(session.name.slice(0, 1).toUpperCase())}</i>${esc(session.name)} · ${session.role === 'developer' ? '개발자' : '기획자'}`;
   $('repo').innerHTML = data.repo ? `<a href="https://github.com/${esc(data.repo)}" target="_blank" rel="noopener">${esc(data.repo)}</a>` : '';
   $('foot').textContent = data.generatedAt ? `마지막 갱신 ${new Date(data.generatedAt).toLocaleString('ko-KR')}` : '';
@@ -216,7 +220,64 @@ async function init() {
   $('guide').innerHTML = md(GUIDE);
 }
 
+// ---------- 스펙 추가: /spec 프롬프트 만들기 ----------
+// PRD 표의 "3.1 | 기능 | 설명" 행과 "### §3.1 제목" 제목에서 기능 후보를 뽑는다.
+function prdItems(prd) {
+  const items = new Map();
+  for (const line of (prd || '').split('\n')) {
+    const row = line.match(/^\|\s*§?(\d+(?:\.\d+)+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/);
+    const head = line.match(/^#{2,4}\s*§\s*(\d+(?:\.\d+)+)\s+(.+)$/);
+    const m = row || head;
+    if (!m || m[2].startsWith('(')) continue; // 템플릿의 빈 항목은 건너뜀
+    items.set(m[1], { ref: `§${m[1]}`, name: m[2].trim(), desc: row ? m[3].trim() : '' });
+  }
+  return [...items.values()];
+}
+
+let specPrd = [];
+const specField = (id) => $('spec-' + id).value.trim();
+
+function buildPrompt(prefix) {
+  const ref = specPrd[Number($('spec-prd').value)];
+  const lines = [`${prefix} ${specField('name')}`];
+  if (ref) lines.push(`PRD 근거: ${ref.ref} ${ref.name}`);
+  if (specField('desc')) lines.push(`요구 내용: ${specField('desc')}`);
+  if (specField('note')) lines.push(`참고: ${specField('note')}`);
+  return lines.join('\n');
+}
+
+function refreshPrompt() {
+  const ready = Boolean(specField('name'));
+  $('spec-out').value = ready ? buildPrompt('/spec') : '기능 이름을 입력하면 프롬프트가 만들어집니다.';
+  document.querySelectorAll('#spec-dialog [data-copy]').forEach((b) => { b.disabled = !ready; });
+}
+
+function openSpecDialog() {
+  specPrd = prdItems(data.prd);
+  $('spec-prd').innerHTML = '<option value="-1">PRD 항목 없이 직접 작성</option>'
+    + specPrd.map((p, i) => `<option value="${i}">${esc(p.ref)} · ${esc(p.name)}</option>`).join('');
+  for (const id of ['name', 'desc', 'note']) $('spec-' + id).value = '';
+  $('spec-msg').textContent = specPrd.length ? '' : 'PRD에서 기능 항목을 찾지 못했습니다. 직접 작성하거나 PRD 표에 "3.1 | 기능 이름 | 설명" 형태로 채워 주세요.';
+  refreshPrompt();
+  $('spec-dialog').showModal();
+}
+
+async function copyPrompt(prefix) {
+  const text = buildPrompt(prefix);
+  try { await navigator.clipboard.writeText(text); }
+  catch { $('spec-out').select(); document.execCommand('copy'); }
+  $('spec-msg').textContent = `복사했습니다. ${prefix === '/spec' ? 'Claude Code' : 'Codex'}에 붙여넣고 실행하세요.`;
+}
+
 // ---------- 이벤트 ----------
+$('add-spec').addEventListener('click', openSpecDialog);
+$('spec-prd').addEventListener('change', () => {
+  const p = specPrd[Number($('spec-prd').value)];
+  if (p) { $('spec-name').value = p.name; $('spec-desc').value = p.desc; }
+  refreshPrompt();
+});
+for (const id of ['name', 'desc', 'note']) $('spec-' + id).addEventListener('input', refreshPrompt);
+$('spec-dialog').addEventListener('click', (e) => { const b = e.target.closest('button[data-copy]'); if (b) copyPrompt(b.dataset.copy); });
 $('pipe').addEventListener('click', (e) => { const li = e.target.closest('li[data-f]'); if (li) { stageFilter = li.dataset.f; render(); } });
 $('quick').addEventListener('click', (e) => { const b = e.target.closest('button[data-q]'); if (b) { quick[b.dataset.q] = !quick[b.dataset.q]; render(); } });
 $('search').addEventListener('input', (e) => { query = e.target.value; renderRows(); });

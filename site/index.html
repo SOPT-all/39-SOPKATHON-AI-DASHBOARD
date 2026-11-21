@@ -56,6 +56,7 @@
         <section class="card listing">
           <div class="searchbar">
             <input id="search" type="search" placeholder="기능 검색 (제목 / 번호)">
+            <button class="btn" id="add-spec" hidden>+ 스펙 추가</button>
           </div>
           <div class="tablewrap">
             <table>
@@ -70,6 +71,33 @@
     <section id="view-prd" hidden><article class="card doc" id="prd"></article></section>
     <section id="view-guide" hidden><article class="card doc" id="guide"></article></section>
   </main>
+
+  <dialog id="spec-dialog" class="modal">
+    <form method="dialog">
+      <h2>스펙 추가</h2>
+      <p class="sub">PRD의 어떤 기능인지 적으면 <code>/spec</code>에 넣을 프롬프트를 만들어 드려요. 복사해서 Claude Code나 Codex에 붙여넣으세요.</p>
+      <label>PRD 항목
+        <select id="spec-prd"></select>
+      </label>
+      <label><span>기능 이름 <span class="req">필수</span></span>
+        <input id="spec-name" maxlength="60" placeholder="예: 투표 생성 API">
+      </label>
+      <label>원하는 내용
+        <textarea id="spec-desc" rows="3" maxlength="600" placeholder="예: 로그인한 사용자가 제목과 선택지 2~5개로 투표를 만든다"></textarea>
+      </label>
+      <label>추가 메모 (선택)
+        <textarea id="spec-note" rows="2" maxlength="400" placeholder="예: 디자인 시안이 있다면 링크, 제약 사항"></textarea>
+      </label>
+      <h3>프롬프트 미리보기</h3>
+      <textarea id="spec-out" rows="6" readonly></textarea>
+      <div class="actions">
+        <button type="button" class="btn" data-copy="/spec">Claude Code용 복사</button>
+        <button type="button" class="btn ghost" data-copy="$spec">Codex용 복사</button>
+        <button value="close" class="btn ghost">닫기</button>
+      </div>
+      <p class="sub" id="spec-msg"></p>
+    </form>
+  </dialog>
 
   <footer id="foot"></footer>
   <script src="firebase-config.js"></script>
