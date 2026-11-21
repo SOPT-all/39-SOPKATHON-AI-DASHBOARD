@@ -29,7 +29,7 @@ argument-hint: "기능 설명 또는 기존 이슈 번호(수정 시)"
    - 새 이슈: `gh issue create --title "<제목>" --body-file <파일> --label spec --label stage:spec`
    - 개정: `gh issue edit N --body-file <파일> --remove-label stage:changes --add-label stage:spec` 후 개정 요약을 `gh issue comment N`으로 남긴다.
    - 본문은 임시 파일로 만들고 끝나면 지운다.
-6. **보고**: 이슈 URL을 알리고 "기획자가 `stage:approved` 라벨을 붙이면 `/code N`으로 진행할 수 있다"고 안내한다. 이슈를 만들 담당자는 `--assignee @me`로 지정한다.
+6. **보고**: 이슈 URL과 대시보드 주소(`docs/ai/dashboard.json`의 `dashboardUrl`)를 알리고 "기획자가 대시보드에서 승인하면 `/code N`으로 진행할 수 있다(반영까지 최대 10분)"고 안내한다. 개정이면 이전 승인은 무효이므로 재승인이 필요하다고 알린다. 담당자는 `--assignee @me`로 지정한다.
 
 ## 스펙 본문 템플릿
 
@@ -68,4 +68,4 @@ argument-hint: "기능 설명 또는 기존 이슈 번호(수정 시)"
 - 요청받은 기능 하나만 다룬다. PRD 전체를 스펙으로 쪼개 한꺼번에 올리지 않는다.
 - 이슈 제목은 한글 명사형(예: `투표 생성 API`). 코드나 브랜치는 만들지 않는다.
 - 비밀 값, 개인 정보는 쓰지 않는다.
-- 스펙 승인 라벨(`stage:approved`)은 **기획자만** 붙인다. 에이전트가 붙이지 않는다.
+- 승인은 **기획자가 대시보드에서** 한다. 에이전트는 승인 라벨을 붙이거나 승인 기록을 만들지 않는다.

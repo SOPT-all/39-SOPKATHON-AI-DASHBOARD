@@ -23,6 +23,16 @@ for (const base of ['.claude/skills', '.agents/skills']) {
   console.log(`✔ ${base}: ${skills.map((s) => '/' + s).join(' ')}`);
 }
 
+// 스킬이 읽는 대시보드 설정. 이미 있으면 덮어쓰지 않는다(projectId를 채워 둔 값 보존).
+const cfg = join(target, 'docs', 'ai', 'dashboard.json');
+if (existsSync(cfg)) {
+  console.log('• docs/ai/dashboard.json 이 이미 있어 그대로 둡니다.');
+} else {
+  mkdirSync(dirname(cfg), { recursive: true });
+  copyFileSync(join(root, 'kit', 'dashboard.json.template'), cfg);
+  console.log('✔ docs/ai/dashboard.json 생성 (firebaseProjectId를 채워 주세요)');
+}
+
 const prd = join(target, 'docs', 'prd', 'prd.md');
 if (existsSync(prd)) {
   console.log('• docs/prd/prd.md 가 이미 있어 그대로 둡니다.');

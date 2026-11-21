@@ -7,9 +7,24 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
-  <header class="top">
+  <section id="login" class="login" hidden>
+    <div class="card">
+      <h1>AI 대시보드</h1>
+      <p class="sub">솝커톤 iOS 1조 · 역할을 선택하세요</p>
+      <button class="btn big" id="login-dev">개발자 · GitHub로 로그인</button>
+      <div class="or">또는</div>
+      <input id="planner-name" maxlength="30" placeholder="기획자 이름 (예: 김기획)" autocomplete="name">
+      <button class="btn big ghost" id="login-planner">기획자로 입장 (토큰 필요 없음)</button>
+      <p class="error" id="login-error" role="alert"></p>
+    </div>
+  </section>
+
+  <header class="top" id="top" hidden>
     <div>
       <h1>AI 대시보드</h1>
       <p class="sub" id="repo"></p>
@@ -18,10 +33,12 @@
       <button data-tab="features" class="on">기능</button>
       <button data-tab="prd">PRD</button>
       <button data-tab="guide">사용법</button>
+      <span class="who" id="who"></span>
+      <button id="logout">로그아웃</button>
     </nav>
   </header>
 
-  <main>
+  <main id="app" hidden>
     <section id="view-features">
       <aside class="side">
         <div class="filters" id="filters"></div>
@@ -34,6 +51,8 @@
   </main>
 
   <footer id="foot"></footer>
+  <script src="firebase-config.js"></script>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

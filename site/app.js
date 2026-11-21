@@ -14,11 +14,15 @@ const GUIDE = `
 기능 하나가 **스펙 → 기획자 컨펌 → 구현 → 리뷰 → PR → 개발자 컨펌** 순서로 어디까지 왔는지 보여 줍니다.
 데이터는 서버 레포의 GitHub 이슈·PR에서 읽어 오며 몇 분마다 갱신됩니다.
 
+## 로그인
+- **개발자**: GitHub 로그인. 허용된 3명(KateteDeveloper, joobogyeong, eun-seoo)만 들어올 수 있습니다.
+- **기획자**: 토큰 없이 이름만 입력해 입장. 스펙을 읽고 승인·수정 요청을 남길 수 있습니다.
+
 ## 단계별 커맨드 (Claude Code · Codex 공통)
 | 단계 | 커맨드 | 누가 | 하는 일 |
 | --- | --- | --- | --- |
 | 1 | \`/spec 기능 설명\` | 개발자 | PRD를 바탕으로 스펙을 쓰고 이슈로 등록 (\`stage:spec\`) |
-| - | 컨펌 | **기획자** | 이슈를 읽고 \`stage:approved\` 라벨을 붙이면 승인, 고칠 게 있으면 코멘트와 \`stage:changes\` |
+| - | 컨펌 | **기획자** | 대시보드에서 스펙을 읽고 **승인** 또는 **수정 요청**(이유 필수). 로그인은 이름만 입력 |
 | 2 | \`/code 이슈번호\` | 개발자 | 승인된 스펙을 구현·테스트·커밋하고 **PR 초안**을 이슈에 작성 |
 | 3 | \`/review 이슈번호\` | 개발자 | 구현이 스펙에 맞는지, 컨벤션·**오버엔지니어링**은 아닌지 점검, 결과를 이슈에 기록 |
 | 4 | \`/pr 이슈번호\` | 개발자 | 초안으로 PR 생성 → 개발자가 리뷰 후 Merge Commit하면 **기능 완료** |
@@ -41,7 +45,14 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const md = (text) => DOMPurify.sanitize(marked.parse(text || '', { gfm: true }), { ADD_ATTR: ['target'] });
 const safeUrl = (u) => (/^https:\/\/github\.com\//.test(u) ? u : '#');
 
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text || ''));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 let data = { features: [] };
+let session = null;      // { role: 'developer' | 'planner', name }
+let approvals = {};      // 이슈 번호 → 컨펌 기록(Firestore)
 let filter = 'all';
 let selected = Number(location.hash.slice(1)) || null;
 
@@ -64,7 +75,7 @@ function renderList() {
 function nextAction(f) {
   if (f.changesRequested) return '기획자가 수정을 요청했습니다. 이슈 코멘트를 확인하고 <code>/spec ' + f.number + '</code>로 개정하세요.';
   return {
-    spec: '기획자 컨펌을 기다리고 있습니다. 이슈에서 내용을 확인하고 <code>stage:approved</code> 라벨을 붙이면 승인됩니다.',
+    spec: '기획자 컨펌을 기다리고 있습니다. 아래 스펙을 읽고 <strong>승인</strong> 또는 <strong>수정 요청</strong>을 눌러 주세요.',
     approved: '승인되었습니다. <code>/code ' + f.number + '</code>로 구현을 시작하세요.',
     coding: '구현 중입니다. 끝나면 <code>/review ' + f.number + '</code>를 실행하세요.',
     review: '리뷰가 기록되었습니다. 필수 수정이 없고 규모가 적정이면 <code>/pr ' + f.number + '</code>로 PR을 올리세요.',
@@ -73,19 +84,58 @@ function nextAction(f) {
   }[f.stage];
 }
 
+// 기획자·개발자가 스펙을 승인하거나 수정 요청하는 영역. 구현이 시작된 뒤에는 결과만 보여 준다.
+function decisionPanel(f) {
+  const a = f.approval;
+  const who = a ? `${esc(a.by)} (${a.role === 'developer' ? '개발자' : '기획자'})` : '';
+  const when = a?.at ? new Date(a.at.toDate()).toLocaleString('ko-KR') : '';
+  const record = a
+    ? `<div class="note ${a.status === 'approved' ? 'ok' : 'warn'}"><strong>${a.status === 'approved' ? '승인됨' : '수정 요청'}</strong> · ${who} · ${esc(when)}${a.comment ? `<br>${esc(a.comment)}` : ''}${f.stale ? '<br><strong>⚠ 승인 이후 스펙이 바뀌었습니다. 다시 승인받으세요.</strong>' : ''}</div>`
+    : '';
+  const canDecide = ['spec', 'approved'].includes(f.stage) && session && (!a || f.stale || a.status === 'changes' || f.stage === 'spec');
+  const controls = canDecide
+    ? `<div class="decide">
+         <textarea id="decide-comment" maxlength="500" rows="2" placeholder="코멘트 (수정 요청은 이유를 적어 주세요)"></textarea>
+         <div class="actions">
+           <button class="btn ok" data-decide="approved">승인</button>
+           <button class="btn warn" data-decide="changes">수정 요청</button>
+           ${a && session.role === 'developer' ? '<button class="btn ghost" data-decide="reset">컨펌 초기화</button>' : ''}
+         </div>
+         <p class="sub" id="decide-msg"></p>
+       </div>`
+    : '';
+  return record + controls;
+}
+
+async function decide(kind) {
+  const f = data.features.find((x) => x.number === selected);
+  const msg = $('decide-msg');
+  const comment = $('decide-comment').value.trim();
+  if (kind === 'changes' && !comment) { msg.textContent = '수정 요청은 이유를 적어 주세요.'; return; }
+  msg.textContent = '저장 중…';
+  try {
+    if (kind === 'reset') await Auth.reset(f.number);
+    else await Auth.decide(f.number, session, kind, comment, await sha256(f.body));
+    approvals = await Auth.loadApprovals();
+    await applyApprovals();
+    render();
+  } catch (e) {
+    msg.textContent = '저장하지 못했습니다. 권한이나 네트워크를 확인하세요. (' + (e.code || e.message) + ')';
+  }
+}
+
 function renderDetail() {
   const f = data.features.find((x) => x.number === selected);
   if (!f) { $('detail').innerHTML = '<p class="empty">왼쪽에서 기능을 선택하세요.</p>'; return; }
   const cur = stageIndex(f.stage);
   const steps = STAGES.map((s, i) => `<div class="step ${i < cur || f.stage === 'done' ? 'done' : ''} ${i === cur && f.stage !== 'done' ? 'now' : ''}">${esc(s.label)}<br><small>${esc(s.hint)}</small></div>`).join('');
-  const isPlannerTurn = f.stage === 'spec';
   const isDevTurn = f.stage === 'pr';
   $('detail').innerHTML = `
     <h2 style="margin:0">${esc(f.title)} <small style="color:var(--muted)">#${f.number}</small></h2>
     <div class="steps">${steps}</div>
     <div class="note">${nextAction(f)}</div>
+    ${decisionPanel(f)}
     <div class="actions">
-      ${isPlannerTurn ? `<a class="btn" target="_blank" rel="noopener" href="${safeUrl(f.url)}">기획자 컨펌하러 가기</a>` : ''}
       ${isDevTurn && f.pr ? `<a class="btn" target="_blank" rel="noopener" href="${safeUrl(f.pr.url)}">PR 리뷰하러 가기</a>` : ''}
       <a class="btn ghost" target="_blank" rel="noopener" href="${safeUrl(f.url)}">스펙 이슈 (코멘트 ${f.commentCount})</a>
       ${f.pr && !isDevTurn ? `<a class="btn ghost" target="_blank" rel="noopener" href="${safeUrl(f.pr.url)}">PR #${f.pr.number} (${esc(f.pr.state)})</a>` : ''}
@@ -101,10 +151,24 @@ function renderTab(tab) {
 
 function render() { renderFilters(); renderList(); renderDetail(); }
 
+// 컨펌 기록을 기능에 합친다. GitHub 라벨은 몇 분 늦게 갱신되므로 Firestore 승인이 있으면 그것을 우선한다.
+async function applyApprovals() {
+  for (const f of data.features) {
+    const a = approvals[f.number];
+    f.approval = a || null;
+    f.stale = Boolean(a && a.specHash !== (await sha256(f.body)));
+    f.changesRequested = f.changesRequested || Boolean(a && a.status === 'changes' && !f.stale);
+    if (f.stage === 'spec' && a?.status === 'approved' && !f.stale) f.stage = 'approved';
+  }
+}
+
 async function init() {
   try {
     data = await (await fetch('data.json', { cache: 'no-cache' })).json();
   } catch { /* data.json 이 없으면 빈 화면으로 시작 */ }
+  try { approvals = await Auth.loadApprovals(); } catch { approvals = {}; }
+  await applyApprovals();
+  $('who').textContent = `${session.name} · ${session.role === 'developer' ? '개발자' : '기획자'}`;
   $('repo').innerHTML = data.repo ? `<a href="https://github.com/${esc(data.repo)}" target="_blank" rel="noopener">${esc(data.repo)}</a>` : '';
   $('foot').textContent = data.generatedAt ? `마지막 갱신 ${new Date(data.generatedAt).toLocaleString('ko-KR')}` : '';
   $('prd').className = 'doc md';
@@ -116,5 +180,38 @@ async function init() {
 
 $('filters').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { filter = b.dataset.f; render(); } });
 $('list').addEventListener('click', (e) => { const li = e.target.closest('li[data-n]'); if (li) { selected = Number(li.dataset.n); location.hash = selected; render(); } });
-$('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) renderTab(b.dataset.tab); });
-init();
+$('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) renderTab(b.dataset.tab); });
+$('detail').addEventListener('click', (e) => { const b = e.target.closest('button[data-decide]'); if (b) decide(b.dataset.decide); });
+$('logout').addEventListener('click', () => Auth.logout());
+
+// 로그인 화면
+const showLoginError = (text) => { $('login-error').textContent = text || ''; };
+$('login-dev').addEventListener('click', async () => {
+  showLoginError();
+  try { await Auth.loginDeveloper(); } catch (e) { showLoginError('GitHub 로그인에 실패했습니다. (' + (e.code || e.message) + ')'); }
+});
+$('login-planner').addEventListener('click', async () => {
+  const name = $('planner-name').value.trim();
+  if (!name) { showLoginError('이름을 입력하세요.'); return; }
+  showLoginError();
+  try { await Auth.loginPlanner(name); } catch (e) { showLoginError('입장하지 못했습니다. (' + (e.code || e.message) + ')'); }
+});
+
+function showApp(on) {
+  $('login').hidden = on;
+  $('top').hidden = !on;
+  $('app').hidden = !on;
+}
+
+if (!Auth.configured) {
+  $('login').hidden = false;
+  showLoginError('Firebase 설정이 비어 있습니다. site/firebase-config.js 를 채워 주세요. (README 참고)');
+  $('login-dev').disabled = $('login-planner').disabled = true;
+} else {
+  Auth.watch(async (s, error) => {
+    session = s;
+    showApp(Boolean(s));
+    showLoginError(error);
+    if (s) await init();
+  });
+}

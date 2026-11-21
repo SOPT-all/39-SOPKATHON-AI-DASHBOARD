@@ -14,8 +14,12 @@ argument-hint: "스펙 이슈 번호 (예: 12)"
 gh issue view N --json number,title,body,labels,state
 ```
 
-- 라벨에 `stage:approved`가 **없으면** 중단한다. "기획자 컨펌 전입니다. 스펙 이슈에서 컨펌을 받으세요."
-- `stage:changes`가 있으면 수정 요청 상태이므로 `/spec N`으로 먼저 개정하라고 안내한다.
+- **기획자 컨펌 확인.** 컨펌은 대시보드(Firestore)에 저장된다. `docs/ai/dashboard.json`의 `firebaseProjectId`로 읽는다.
+  ```bash
+  curl -s "https://firestore.googleapis.com/v1/projects/<firebaseProjectId>/databases/(default)/documents/approvals/N"
+  ```
+  응답의 `fields.status.stringValue`가 `approved`면 통과다 (`fields.by`, `fields.comment`도 보고 시 인용). 문서가 없거나(404) `changes`면 중단한다: "기획자 컨펌 전입니다. 대시보드에서 승인을 받으세요 (`dashboardUrl`)." `changes`면 코멘트를 보여 주고 `/spec N`으로 개정하라고 안내한다. `firebaseProjectId`가 비어 있으면 이슈에 `stage:approved` 라벨이 있는지로 대신 확인한다.
+- 스펙이 승인 뒤에 개정되었을 수 있다(대시보드가 "승인 이후 스펙이 바뀜"으로 표시). 이슈 최종 수정 시각이 승인 시각(`fields.at.timestampValue`)보다 늦고 본문이 바뀐 듯하면 사용자에게 알리고 재승인 여부를 묻는다.
 - 이슈가 닫혀 있으면 중단한다.
 - 워킹 트리가 깨끗한지 `git status --porcelain`으로 확인한다. 변경이 있으면 사용자에게 알리고 멈춘다.
 
@@ -24,7 +28,7 @@ gh issue view N --json number,title,body,labels,state
 1. `AGENTS.md`를 읽는다. **패키지 구조, 네이밍, 공통 응답, 예외 처리, 검증, 설정 규칙을 그대로 따른다.** 코드를 쓰기 전에 관련 기존 파일(Controller, `CommonResponse`, `BusinessException`, 에러 코드 enum 등)을 실제로 열어 본다. 없는 클래스나 API를 있는 것처럼 쓰지 않는다.
 2. 스펙의 **요구사항(FR)과 완료 조건**을 체크리스트로 정리해 사용자에게 한 번 보여 준다. 범위를 넘는 일(리팩터링, 의존성 추가)은 계획에 넣지 않는다.
 3. 브랜치를 만든다: `git switch main && git pull --ff-only && git switch -c feat/#N`. 이미 있으면 그 브랜치로 전환한다. `main`에는 직접 커밋하지 않는다.
-4. 라벨을 옮긴다: `gh issue edit N --remove-label stage:approved --add-label stage:coding`.
+4. 라벨을 옮긴다: `gh issue edit N --remove-label stage:spec --remove-label stage:approved --add-label stage:coding` (없는 라벨 제거 오류는 무시).
 
 ## 3. 구현
 

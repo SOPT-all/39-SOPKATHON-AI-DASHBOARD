@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 개발자 3명: GitHub 로그인 + GitHub 숫자 ID가 허용 목록에 있을 때만
+    // KateteDeveloper 192939184 · joobogyeong 162878426 · eun-seoo 163312948
+    function isDeveloper() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'github.com'
+        && request.auth.token.firebase.identities['github.com'][0]
+           in ['192939184', '162878426', '163312948'];
+    }
+
+    // 기획자: 토큰 없이 들어오는 익명 로그인
+    function isPlanner() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // 기능(이슈 번호)별 최신 컨펌 결과 1건. 누구나 읽을 수 있다 (스킬이 /code 게이트에서 읽음).
+    match /approvals/{issueNumber} {
+      allow read: if true;
+
+      allow create, update: if (isDeveloper() || isPlanner())
+        && request.resource.data.keys().hasOnly(['status', 'by', 'role', 'comment', 'specHash', 'at'])
+        && request.resource.data.status in ['approved', 'changes']
+        && request.resource.data.by is string
+        && request.resource.data.by.size() > 0 && request.resource.data.by.size() <= 30
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 500
+        && request.resource.data.specHash is string && request.resource.data.specHash.size() <= 64
+        && request.resource.data.at == request.time
+        && request.resource.data.role == (isDeveloper() ? 'developer' : 'planner');
+
+      // 승인 취소(초기화)는 개발자만
+      allow delete: if isDeveloper();
+    }
+  }
+}
