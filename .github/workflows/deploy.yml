@@ -1,0 +1,40 @@
+name: Deploy dashboard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/10 * * * *'   # 서버 레포의 이슈·PR 변경을 10분마다 반영
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build data.json from target repo
+        run: node scripts/build-data.mjs
+        env:
+          # 서버 레포가 공개면 비워도 된다. 비공개이거나 rate limit에 걸리면 읽기 권한 토큰을 시크릿으로 등록한다.
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 대시보드</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>AI 대시보드</h1>
+      <p class="sub" id="repo"></p>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="features" class="on">기능</button>
+      <button data-tab="prd">PRD</button>
+      <button data-tab="guide">사용법</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-features">
+      <aside class="side">
+        <div class="filters" id="filters"></div>
+        <ul id="list"></ul>
+      </aside>
+      <article id="detail"><p class="empty">왼쪽에서 기능을 선택하세요.</p></article>
+    </section>
+    <section id="view-prd" hidden><article class="doc" id="prd"></article></section>
+    <section id="view-guide" hidden><article class="doc" id="guide"></article></section>
+  </main>
+
+  <footer id="foot"></footer>
+  <script src="app.js"></script>
+</body>
+</html>
