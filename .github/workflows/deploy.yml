@@ -31,7 +31,8 @@ jobs:
         run: node scripts/build-data.mjs
         env:
           # 서버 레포가 공개면 비워도 된다. 비공개이거나 rate limit에 걸리면 읽기 권한 토큰을 시크릿으로 등록한다.
-          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+          # 토큰이 없으면 워크플로 기본 토큰을 쓴다 (공유 러너 IP는 비인증 요청이 rate limit에 걸린다)
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN || github.token }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
