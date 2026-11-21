@@ -16,8 +16,22 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.firebase.sign_in_provider == 'anonymous';
     }
 
-    // 기능(이슈 번호)별 최신 컨펌 결과 1건. 누구나 읽을 수 있다 (스킬이 /code 게이트에서 읽음).
-    match /approvals/{issueNumber} {
+    // 스펙 문서. /spec이 만든 마크다운을 개발자가 대시보드에서 올린다. 읽기는 공개(/code가 읽음).
+    match /specs/{specId} {
+      allow read: if true;
+      allow create, update: if isDeveloper()
+        && specId.matches('[a-z0-9-]{1,40}')
+        && request.resource.data.keys().hasOnly(['title', 'body', 'prdRef', 'by', 'at'])
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100
+        && request.resource.data.body is string && request.resource.data.body.size() > 0 && request.resource.data.body.size() <= 30000
+        && request.resource.data.prdRef is string && request.resource.data.prdRef.size() <= 100
+        && request.resource.data.by is string && request.resource.data.by.size() <= 30
+        && request.resource.data.at == request.time;
+      allow delete: if isDeveloper();
+    }
+
+    // 기능(스펙 id)별 최신 컨펌 결과 1건. 누구나 읽을 수 있다 (스킬이 /code 게이트에서 읽음).
+    match /approvals/{specId} {
       allow read: if true;
 
       allow create, update: if (isDeveloper() || isPlanner())

@@ -42,6 +42,8 @@ for (const issue of issues) {
   const review = comments.filter((c) => c.body.startsWith(REVIEW_MARKER)).at(-1);
 
   features.push({
+    // /code가 이슈를 만들 때 본문에 넣는 `<!-- sopkathon:spec:<id> -->` 로 대시보드 스펙과 이어진다.
+    specId: (issue.body ?? '').match(/<!-- sopkathon:spec:([a-z0-9-]+) -->/)?.[1] ?? null,
     number: issue.number,
     title: issue.title,
     body: issue.body ?? '',

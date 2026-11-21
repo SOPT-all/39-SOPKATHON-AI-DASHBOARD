@@ -40,6 +40,15 @@ const Auth = (() => {
     async loginPlanner(name) { store.set('plannerName', name.trim().slice(0, 30)); await auth.signInAnonymously(); },
     logout: () => auth.signOut(),
 
+    async loadSpecs() {
+      const snap = await db.collection('specs').get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data(), at: d.data().at?.toMillis?.() ?? 0 })).sort((a, b) => a.at - b.at);
+    },
+    uploadSpec(id, session, title, body, prdRef) {
+      return db.collection('specs').doc(id).set({
+        title, body, prdRef, by: session.name, at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    },
     async loadApprovals() {
       const snap = await db.collection('approvals').get();
       return Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]));

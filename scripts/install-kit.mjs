@@ -1,7 +1,7 @@
 // 사용법: node scripts/install-kit.mjs <서버 레포 경로>
 // kit/skills 를 Claude(.claude/skills)와 Codex(.agents/skills) 양쪽에 복사한다.
 // PRD 템플릿(docs/prd/prd.md)은 없을 때만 만든다. 이미 있는 PRD는 덮어쓰지 않는다.
-import { cpSync, existsSync, mkdirSync, readdirSync, copyFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, copyFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +31,17 @@ if (existsSync(cfg)) {
   mkdirSync(dirname(cfg), { recursive: true });
   copyFileSync(join(root, 'kit', 'dashboard.json.template'), cfg);
   console.log('✔ docs/ai/dashboard.json 생성 (firebaseProjectId를 채워 주세요)');
+}
+
+// /spec 이 만드는 스펙 초안 파일은 대시보드에 올리는 용도라 커밋하지 않는다.
+const ignore = join(target, '.gitignore');
+const ignored = existsSync(ignore) ? readFileSync(ignore, 'utf8') : '';
+if (/^\/?docs\/specs\/?$/m.test(ignored)) {
+  console.log('• .gitignore 에 docs/specs/ 가 이미 있습니다.');
+} else {
+  const lead = ignored && !ignored.endsWith('\n') ? '\n' : '';
+  appendFileSync(ignore, `${lead}\n# /spec 스펙 초안 (대시보드에 업로드하는 파일, 커밋하지 않음)\ndocs/specs/\n`);
+  console.log('✔ .gitignore 에 docs/specs/ 추가');
 }
 
 const prd = join(target, 'docs', 'prd', 'prd.md');

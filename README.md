@@ -5,7 +5,7 @@
 
 ```text
 PRD ─▶ /spec ─▶ [기획자 컨펌] ─▶ /code ─▶ /review ─▶ /pr ─▶ [개발자 머지 = 끝]
-        이슈 등록     stage:approved     구현+PR 초안   맞는지·오버엔지니어링   PR 생성     Merge Commit
+        스펙 파일→업로드   승인        이슈·브랜치+구현+PR 초안   맞는지·오버엔지니어링   PR 생성     Merge Commit
 ```
 
 ## 동작 방식 (서버 없음)
@@ -13,14 +13,14 @@ PRD ─▶ /spec ─▶ [기획자 컨펌] ─▶ /code ─▶ /review ─▶ /p
 | 구성 | 설명 |
 | --- | --- |
 | 스킬 `kit/skills` | `/spec /code /review /pr`. Claude Code와 Codex가 같은 `SKILL.md`를 읽습니다 |
-| 상태 저장소 | 서버 레포의 **GitHub 이슈(스펙)와 PR**. 별도 DB 없음. 상태는 `stage:*` 라벨 |
+| 상태 저장소 | 스펙은 대시보드(Firestore `specs/{id}`), 구현 단계부터는 서버 레포의 **GitHub 이슈와 PR**(상태는 `stage:*` 라벨). 이슈는 `/code`가 만들고 본문 마커 `sopkathon:spec:<id>`로 스펙과 이어짐 |
 | 대시보드 `site/` | 10분마다 Actions가 이슈·PR을 읽어 `data.json`을 만들고 GitHub Pages로 배포 |
 | 로그인 | Firebase Auth. **개발자**는 GitHub 로그인(KateteDeveloper, joobogyeong, eun-seoo 3명만), **기획자**는 이름만 입력(익명 로그인, 토큰 불필요) |
-| 기획자 컨펌 | 대시보드에서 **승인 / 수정 요청**. Firestore `approvals/{이슈번호}`에 저장되고 `/code`가 읽어 게이트로 씀 |
+| 기획자 컨펌 | 대시보드에서 **승인 / 수정 요청**. Firestore `approvals/{스펙ID}`에 저장되고 `/code`가 읽어 게이트로 씀 |
 | 개발자 컨펌 | PR 리뷰·approve 후 Merge Commit |
 
-라벨: `spec`, `stage:spec` → `stage:approved` → `stage:coding` → `stage:review` → `stage:pr` → (이슈 close = 완료), `stage:changes`.
-라벨은 `/spec`을 처음 실행할 때 자동으로 만들어집니다.
+라벨(이슈가 만들어진 뒤): `spec`, `stage:coding` → `stage:review` → `stage:pr` → (이슈 close = 완료), `stage:changes`.
+스펙 작성·승인 단계는 이슈가 없으므로 라벨이 아니라 대시보드 데이터로 판단합니다. 라벨은 `/code`가 처음 실행될 때 자동으로 만들어집니다.
 
 ## 1. 서버 레포에 스킬 설치
 
@@ -35,11 +35,11 @@ node scripts/install-kit.mjs ../39-SOPKATHON-SERVER-iOS1
 
 ## 2. 사용 흐름
 
-1. 개발자: `/spec 투표 생성 기능` → 스펙 미리보기 확인 후 이슈 등록
+1. 개발자: `/spec 투표 생성 기능` → 스펙 미리보기 확인 후 `docs/specs/<id>.md` 저장 → 대시보드 **스펙 업로드**로 올림 (GitHub 이슈는 아직 안 만듦)
 2. 기획자: 대시보드에 이름으로 입장 → 스펙을 읽고 **승인** 또는 **수정 요청**(이유 필수)
-3. 개발자: `/code 12` — 구현하고 **PR 초안**까지 이슈에 작성
-4. 개발자: `/review 12` — 구현이 스펙에 맞는지·컨벤션·**오버엔지니어링**인지 점검 (필요하면 줄이는 방향으로 수정)
-5. 개발자: `/pr 12` — 초안으로 PR 생성 → 리뷰·approve 후 Merge Commit하면 **기능 끝**
+3. 개발자: `/code <스펙ID>` — **GitHub 이슈와 `feat/#N` 브랜치를 만들고** 구현, **PR 초안**까지 이슈에 작성
+4. 개발자: `/review <스펙ID>` — 구현이 스펙에 맞는지·컨벤션·**오버엔지니어링**인지 점검 (필요하면 줄이는 방향으로 수정)
+5. 개발자: `/pr <스펙ID>` — 초안으로 PR 생성 → 리뷰·approve 후 Merge Commit하면 **기능 끝**
 
 Claude Code는 `/spec`, Codex는 `$spec`(또는 `/skills`)으로 호출합니다. Claude Code에 내장된 `/review`와 이름이 겹치면 `/code-review`나 스킬 목록에서 프로젝트 스킬을 직접 고르세요.
 

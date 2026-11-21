@@ -12,32 +12,32 @@ const stageLabel = (key) => STAGES[stageIndex(key)].label;
 const GUIDE = `
 ## 이 대시보드는
 기능 하나가 **스펙 → 기획자 컨펌 → 구현 → 리뷰 → PR → 개발자 머지** 순서로 어디까지 왔는지 보여 줍니다.
-데이터는 서버 레포의 GitHub 이슈·PR에서 읽어 오며 몇 분마다 갱신됩니다.
+스펙은 이 대시보드에 저장되고, 구현이 시작되면 서버 레포의 GitHub 이슈·PR 상태가 함께 표시됩니다.
 
 ## 로그인
 - **개발자**: GitHub 로그인. 허용된 3명(KateteDeveloper, joobogyeong, eun-seoo)만 들어올 수 있습니다.
 - **기획자**: 토큰 없이 이름만 입력해 입장. 스펙을 읽고 승인·수정 요청을 남길 수 있습니다.
 
 ## 스펙 만들기
-개발자는 기능 목록 위쪽의 **+ 스펙 추가**를 누릅니다. PRD 항목을 고르고 내용을 적으면 \`/spec\` 프롬프트가 만들어집니다. **Claude Code용 복사** 또는 **Codex용 복사**를 눌러 붙여넣으면 AI가 스펙을 쓰고 이슈로 등록합니다.
+개발자는 기능 목록 위쪽의 **+ 스펙 추가**를 누릅니다. PRD 항목을 고르고 내용을 적으면 \`/spec\` 프롬프트가 만들어집니다. **Claude Code용 복사** 또는 **Codex용 복사**를 눌러 붙여넣으면 AI가 \`docs/specs/<id>.md\` 파일로 스펙을 씁니다. 그 파일을 **스펙 업로드**로 올리면 기획자가 볼 수 있습니다. GitHub 이슈는 \`/code\`가 만듭니다.
 
 ## 단계별 커맨드 (Claude Code · Codex 공통)
 | 단계 | 커맨드 | 누가 | 하는 일 |
 | --- | --- | --- | --- |
-| 1 | \`/spec 기능 설명\` | 개발자 | PRD를 바탕으로 스펙을 쓰고 이슈로 등록 (\`stage:spec\`) |
+| 1 | \`/spec 기능 설명\` | 개발자 | PRD를 바탕으로 스펙 파일을 쓴다. 대시보드 **스펙 업로드**로 올린다 |
 | - | 컨펌 | **기획자** | 대시보드에서 스펙을 읽고 **승인** 또는 **수정 요청**(이유 필수). 로그인은 이름만 입력 |
-| 2 | \`/code 이슈번호\` | 개발자 | 승인된 스펙을 구현·테스트·커밋하고 **PR 초안**을 이슈에 작성 |
-| 3 | \`/review 이슈번호\` | 개발자 | 구현이 스펙에 맞는지, 컨벤션·**오버엔지니어링**은 아닌지 점검, 결과를 이슈에 기록 |
-| 4 | \`/pr 이슈번호\` | 개발자 | 초안으로 PR 생성 → 개발자가 리뷰 후 Merge Commit하면 **기능 완료** |
+| 2 | \`/code 스펙ID\` | 개발자 | 승인된 스펙으로 **GitHub 이슈와 브랜치를 만들고** 구현·테스트·커밋, **PR 초안**을 이슈에 작성 |
+| 3 | \`/review 스펙ID\` | 개발자 | 구현이 스펙에 맞는지, 컨벤션·**오버엔지니어링**은 아닌지 점검, 결과를 이슈에 기록 |
+| 4 | \`/pr 스펙ID\` | 개발자 | 초안으로 PR 생성 → 개발자가 리뷰 후 Merge Commit하면 **기능 완료** |
 
 Claude Code에서는 \`/spec\`, Codex에서는 \`$spec\`(또는 \`/skills\`에서 선택)으로 부르세요.
 
 ## 상태 배지
 | 배지 | 뜻 |
 | --- | --- |
-| 스펙 작성 | 스펙이 올라와 기획자 컨펌을 기다림 |
+| 스펙 작성 | 스펙이 업로드되어 기획자 컨펌을 기다림 (아직 이슈 없음) |
 | 기획 컨펌 | 승인됨. \`/code\` 가능 |
-| 구현 | 브랜치에서 구현 중 |
+| 구현 | \`/code\`가 이슈를 만들고 브랜치에서 구현 중 |
 | 리뷰 | \`/review\` 결과가 이슈에 기록됨 |
 | PR | PR이 열려 개발자 머지를 기다림 |
 | 완료 | PR이 머지되고 이슈가 닫힘 |
@@ -57,11 +57,13 @@ async function sha256(text) {
 
 let data = { features: [] };
 let session = null;      // { role: 'developer' | 'planner', name }
-let approvals = {};      // 이슈 번호 → 컨펌 기록(Firestore)
+let approvals = {};      // 스펙 id → 컨펌 기록(Firestore)
+let specs = [];          // Firestore에 올라온 스펙 [{ id, title, body, by, at }]
+let rawIssues = [];      // data.json의 GitHub 이슈(/code가 만든 것)
 let stageFilter = 'all'; // 'all' | 단계 key | 'changes'
 let quick = { pr: false, mine: false };
 let query = '';
-let selected = Number(location.hash.slice(1)) || null;
+let selected = decodeURIComponent(location.hash.slice(1)) || null;
 
 // ---------- 목록 ----------
 function visibleFeatures() {
@@ -70,7 +72,7 @@ function visibleFeatures() {
     (stageFilter === 'all' || (stageFilter === 'changes' ? f.changesRequested : f.stage === stageFilter))
     && (!quick.pr || f.pr)
     && (!quick.mine || (session && f.assignees.includes(session.name)))
-    && (!q || f.title.toLowerCase().includes(q) || String(f.number).includes(q)));
+    && (!q || f.title.toLowerCase().includes(q) || f.id.includes(q)));
 }
 
 function badges(f) {
@@ -100,23 +102,23 @@ function renderSide() {
 function renderRows() {
   const rows = visibleFeatures();
   $('rows').innerHTML = rows.length
-    ? rows.map((f) => `<tr data-n="${f.number}" class="${f.number === selected ? 'on' : ''}">
-        <td><div class="t">${esc(f.title)}</div><div class="slug">#${f.number}</div></td>
+    ? rows.map((f) => `<tr data-id="${esc(f.id)}" class="${f.id === selected ? 'on' : ''}">
+        <td><div class="t">${esc(f.title)}</div><div class="slug">${esc(f.id)}${f.number ? ` · #${f.number}` : ''}</div></td>
         <td>${badges(f)}</td>
         <td>${esc(f.assignees.join(', ') || '-')}</td>
         <td>${f.pr ? `<a href="${safeUrl(f.pr.url)}" target="_blank" rel="noopener">#${f.pr.number}</a>` : '-'}</td>
       </tr>`).join('')
-    : `<tr><td colspan="4" class="empty">${data.features.length ? '조건에 맞는 기능이 없습니다.' : '아직 기능이 없습니다. <code>/spec 기능 설명</code>으로 시작해 보세요.'}</td></tr>`;
+    : `<tr><td colspan="4" class="empty">${data.features.length ? '조건에 맞는 기능이 없습니다.' : '아직 기능이 없습니다. <code>/spec 기능 설명</code>으로 스펙을 만들고 <strong>스펙 업로드</strong>로 올려 보세요.'}</td></tr>`;
 }
 
 // ---------- 상세 ----------
 function nextAction(f) {
-  if (f.changesRequested) return '기획자가 수정을 요청했습니다. 코멘트를 확인하고 <code>/spec ' + f.number + '</code>로 개정하세요.';
+  if (f.changesRequested) return '기획자가 수정을 요청했습니다. 코멘트를 확인하고 <code>/spec ' + f.id + '</code>로 개정해 다시 업로드하세요.';
   return {
     spec: '기획자 컨펌을 기다리고 있습니다. 아래 스펙을 읽고 <strong>승인</strong> 또는 <strong>수정 요청</strong>을 눌러 주세요.',
-    approved: '승인되었습니다. <code>/code ' + f.number + '</code>로 구현을 시작하세요.',
-    coding: '구현 중입니다. 끝나면 <code>/review ' + f.number + '</code>를 실행하세요.',
-    review: '리뷰가 기록되었습니다. 필수 수정이 없고 규모가 적정이면 <code>/pr ' + f.number + '</code>로 PR을 올리세요.',
+    approved: '승인되었습니다. <code>/code ' + f.id + '</code>로 이슈를 만들고 구현을 시작하세요.',
+    coding: '구현 중입니다. 끝나면 <code>/review ' + f.id + '</code>를 실행하세요.',
+    review: '리뷰가 기록되었습니다. 필수 수정이 없고 규모가 적정이면 <code>/pr ' + f.id + '</code>로 PR을 올리세요.',
     pr: 'PR이 열려 있습니다. 개발자가 리뷰·approve 후 Merge Commit으로 머지하면 기능이 끝납니다.',
     done: '완료되었습니다.',
   }[f.stage];
@@ -146,14 +148,14 @@ function decisionPanel(f) {
 }
 
 async function decide(kind) {
-  const f = data.features.find((x) => x.number === selected);
+  const f = data.features.find((x) => x.id === selected);
   const msg = $('decide-msg');
   const comment = $('decide-comment').value.trim();
   if (kind === 'changes' && !comment) { msg.textContent = '수정 요청은 이유를 적어 주세요.'; return; }
   msg.textContent = '저장 중…';
   try {
-    if (kind === 'reset') await Auth.reset(f.number);
-    else await Auth.decide(f.number, session, kind, comment, await sha256(f.body));
+    if (kind === 'reset') await Auth.reset(f.id);
+    else await Auth.decide(f.id, session, kind, comment, await sha256(f.specBody));
     await reload(false);
   } catch (e) {
     msg.textContent = '저장하지 못했습니다. 권한이나 네트워크를 확인하세요. (' + (e.code || e.message) + ')';
@@ -161,22 +163,22 @@ async function decide(kind) {
 }
 
 function renderDetail() {
-  const f = data.features.find((x) => x.number === selected);
+  const f = data.features.find((x) => x.id === selected);
   if (!f) { $('detail').innerHTML = '<p class="empty">왼쪽 목록에서 기능을 선택하세요.</p>'; return; }
   const cur = stageIndex(f.stage);
   const steps = STAGES.map((s, i) => `<div class="step ${i < cur || f.stage === 'done' ? 'done' : ''} ${i === cur && f.stage !== 'done' ? 'now' : ''}">${esc(s.label)}<small>${esc(s.hint)}</small></div>`).join('');
   const isDevTurn = f.stage === 'pr';
   $('detail').innerHTML = `
-    <h2>${esc(f.title)} <small>#${f.number}</small></h2>
+    <h2>${esc(f.title)} <small>${esc(f.id)}${f.number ? ` · #${f.number}` : ''}</small></h2>
     <div class="steps">${steps}</div>
     <div class="note">${nextAction(f)}</div>
     ${decisionPanel(f)}
     <div class="actions">
       ${isDevTurn && f.pr ? `<a class="btn" target="_blank" rel="noopener" href="${safeUrl(f.pr.url)}">PR 리뷰하러 가기</a>` : ''}
-      <a class="btn ghost" target="_blank" rel="noopener" href="${safeUrl(f.url)}">스펙 이슈 (코멘트 ${f.commentCount})</a>
+      ${f.url ? `<a class="btn ghost" target="_blank" rel="noopener" href="${safeUrl(f.url)}">이슈 #${f.number} (코멘트 ${f.commentCount})</a>` : ''}
       ${f.pr && !isDevTurn ? `<a class="btn ghost" target="_blank" rel="noopener" href="${safeUrl(f.pr.url)}">PR #${f.pr.number} (${esc(f.pr.state)})</a>` : ''}
     </div>
-    <h2 class="sec">스펙</h2><div class="md">${md(f.body)}</div>
+    <h2 class="sec">스펙</h2><div class="md">${md(f.specBody)}</div>
     ${f.review ? `<h2 class="sec">코드 리뷰 결과 · <a href="${safeUrl(f.review.url)}" target="_blank" rel="noopener">코멘트 보기</a></h2><div class="md">${md(f.review.body)}</div>` : ''}`;
 }
 
@@ -191,26 +193,44 @@ function renderTab(tab) {
 // 컨펌 기록을 기능에 합친다. GitHub 라벨은 몇 분 늦게 갱신되므로 Firestore 승인이 있으면 그것을 우선한다.
 async function applyApprovals() {
   for (const f of data.features) {
-    const a = approvals[f.number];
+    const a = approvals[f.id];
     f.approval = a || null;
-    f.stale = Boolean(a && a.specHash !== (await sha256(f.body)));
+    f.stale = Boolean(a && a.specHash !== (await sha256(f.specBody)));
     f.changesRequested = f.changesRequested || Boolean(a && a.status === 'changes' && !f.stale);
     if (f.stage === 'spec' && a?.status === 'approved' && !f.stale) f.stage = 'approved';
   }
 }
 
+// 스펙(Firestore)과 이슈(data.json)를 id로 합친다. 이슈가 없으면 아직 /code 전이므로 '스펙 작성' 단계다.
+// 스펙 없이 이슈만 있는 기존 기능은 이슈 본문을 스펙으로 쓴다.
+function mergeFeatures() {
+  const byId = new Map(specs.map((s) => [s.id, {
+    id: s.id, number: null, title: s.title, specBody: s.body, stage: 'spec', changesRequested: false,
+    assignees: [], url: null, commentCount: 0, pr: null, review: null,
+  }]));
+  for (const i of rawIssues) {
+    const id = i.specId || `issue-${i.number}`;
+    const base = byId.get(id) || { id, title: i.title, specBody: i.body };
+    byId.set(id, { ...i, ...base, id, number: i.number, stage: i.stage, changesRequested: i.changesRequested,
+      assignees: i.assignees, url: i.url, commentCount: i.commentCount, pr: i.pr, review: i.review });
+  }
+  return [...byId.values()];
+}
+
 async function reload(fetchData = true) {
   if (fetchData) {
-    try { data = await (await fetch('data.json', { cache: 'no-cache' })).json(); } catch { /* data.json 이 없으면 빈 화면 */ }
+    try { data = await (await fetch('data.json', { cache: 'no-cache' })).json(); rawIssues = data.features || []; } catch { /* data.json 이 없으면 이슈 없음 */ }
   }
   try { approvals = await Auth.loadApprovals(); } catch { approvals = {}; }
+  try { specs = await Auth.loadSpecs(); } catch { specs = []; }
+  data.features = mergeFeatures();
   await applyApprovals();
   render();
 }
 
 async function init() {
   await reload();
-  $('add-spec').hidden = session.role !== 'developer'; // 프롬프트를 실행하는 쪽은 개발자
+  $('add-spec').hidden = $('upload-spec').hidden = session.role !== 'developer'; // 프롬프트를 실행하는 쪽은 개발자
   $('who').innerHTML = `<i>${esc(session.name.slice(0, 1).toUpperCase())}</i>${esc(session.name)} · ${session.role === 'developer' ? '개발자' : '기획자'}`;
   $('repo').innerHTML = data.repo ? `<a href="https://github.com/${esc(data.repo)}" target="_blank" rel="noopener">${esc(data.repo)}</a>` : '';
   $('foot').textContent = data.generatedAt ? `마지막 갱신 ${new Date(data.generatedAt).toLocaleString('ko-KR')}` : '';
@@ -271,6 +291,42 @@ async function copyPrompt(prefix) {
 
 // ---------- 이벤트 ----------
 $('add-spec').addEventListener('click', openSpecDialog);
+
+// ---------- 스펙 업로드 ----------
+const slugify = (s) => s.toLowerCase().replace(/\.md$/, '').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+
+function openUploadDialog() {
+  for (const id of ['file', 'id', 'title', 'body']) $('upload-' + id).value = '';
+  $('upload-msg').textContent = '';
+  $('upload-dialog').showModal();
+}
+
+$('upload-spec').addEventListener('click', openUploadDialog);
+$('upload-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  $('upload-body').value = text;
+  if (!$('upload-id').value) $('upload-id').value = slugify(file.name);
+  if (!$('upload-title').value) $('upload-title').value = (text.match(/^#\s+(.+)$/m)?.[1] || '').trim();
+});
+$('upload-go').addEventListener('click', async () => {
+  const id = $('upload-id').value.trim();
+  const title = $('upload-title').value.trim();
+  const body = $('upload-body').value.trim();
+  const msg = $('upload-msg');
+  if (!/^[a-z0-9-]{1,40}$/.test(id)) { msg.textContent = '스펙 ID는 영문 소문자·숫자·하이픈 40자 이내여야 합니다.'; return; }
+  if (!title || !body) { msg.textContent = '제목과 본문을 채워 주세요.'; return; }
+  msg.textContent = '업로드 중…';
+  try {
+    await Auth.uploadSpec(id, session, title, body, '');
+    await reload(false);
+    selected = id; location.hash = encodeURIComponent(id); render();
+    $('upload-dialog').close();
+  } catch (e) {
+    msg.textContent = '업로드하지 못했습니다. 개발자 로그인인지 확인하세요. (' + (e.code || e.message) + ')';
+  }
+});
 $('spec-prd').addEventListener('change', () => {
   const p = specPrd[Number($('spec-prd').value)];
   if (p) { $('spec-name').value = p.name; $('spec-desc').value = p.desc; }
@@ -281,7 +337,7 @@ $('spec-dialog').addEventListener('click', (e) => { const b = e.target.closest('
 $('pipe').addEventListener('click', (e) => { const li = e.target.closest('li[data-f]'); if (li) { stageFilter = li.dataset.f; render(); } });
 $('quick').addEventListener('click', (e) => { const b = e.target.closest('button[data-q]'); if (b) { quick[b.dataset.q] = !quick[b.dataset.q]; render(); } });
 $('search').addEventListener('input', (e) => { query = e.target.value; renderRows(); });
-$('rows').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-n]'); if (tr) { selected = Number(tr.dataset.n); location.hash = selected; render(); } });
+$('rows').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) { selected = tr.dataset.id; location.hash = encodeURIComponent(selected); render(); } });
 $('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) renderTab(b.dataset.tab); });
 $('reset').addEventListener('click', () => { stageFilter = 'all'; quick = { pr: false, mine: false }; query = ''; $('search').value = ''; renderTab('features'); render(); });
 $('detail').addEventListener('click', (e) => { const b = e.target.closest('button[data-decide]'); if (b) decide(b.dataset.decide); });
