@@ -4,8 +4,8 @@
 기능 하나를 `스펙 → 기획자 컨펌 → 구현 → 리뷰 → PR → 개발자 컨펌` 순서로 AI와 함께 진행하고, 어디까지 왔는지를 대시보드에서 봅니다.
 
 ```text
-PRD ─▶ /spec ─▶ [기획자 컨펌] ─▶ /code ─▶ /review ─▶ /pr ─▶ [개발자 컨펌]
-        이슈 등록     stage:approved     구현·테스트   컨벤션 점검   PR 생성      Merge Commit
+PRD ─▶ /spec ─▶ [기획자 컨펌] ─▶ /code ─▶ /review ─▶ /pr ─▶ [개발자 머지 = 끝]
+        이슈 등록     stage:approved     구현+PR 초안   맞는지·오버엔지니어링   PR 생성     Merge Commit
 ```
 
 ## 동작 방식 (서버 없음)
@@ -36,8 +36,9 @@ node scripts/install-kit.mjs ../39-SOPKATHON-SERVER-iOS1
 
 1. 개발자: `/spec 투표 생성 기능` → 스펙 미리보기 확인 후 이슈 등록
 2. 기획자: 대시보드의 **기획자 컨펌하러 가기** → 이슈 확인 → `stage:approved` 라벨
-3. 개발자: `/code 12` → `/review 12` → `/pr 12`
-4. 팀원: PR 리뷰·approve → Merge Commit
+3. 개발자: `/code 12` — 구현하고 **PR 초안**까지 이슈에 작성
+4. 개발자: `/review 12` — 구현이 스펙에 맞는지·컨벤션·**오버엔지니어링**인지 점검 (필요하면 줄이는 방향으로 수정)
+5. 개발자: `/pr 12` — 초안으로 PR 생성 → 리뷰·approve 후 Merge Commit하면 **기능 끝**
 
 Claude Code는 `/spec`, Codex는 `$spec`(또는 `/skills`)으로 호출합니다. Claude Code에 내장된 `/review`와 이름이 겹치면 `/code-review`나 스킬 목록에서 프로젝트 스킬을 직접 고르세요.
 

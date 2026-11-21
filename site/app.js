@@ -19,9 +19,9 @@ const GUIDE = `
 | --- | --- | --- | --- |
 | 1 | \`/spec 기능 설명\` | 개발자 | PRD를 바탕으로 스펙을 쓰고 이슈로 등록 (\`stage:spec\`) |
 | - | 컨펌 | **기획자** | 이슈를 읽고 \`stage:approved\` 라벨을 붙이면 승인, 고칠 게 있으면 코멘트와 \`stage:changes\` |
-| 2 | \`/code 이슈번호\` | 개발자 | 승인된 스펙을 컨벤션에 맞게 구현·테스트·커밋 |
-| 3 | \`/review 이슈번호\` | 개발자 | 코드 컨벤션과 스펙 완료 조건 점검, 결과를 이슈에 기록 |
-| 4 | \`/pr 이슈번호\` | 개발자 | 푸시하고 PR 생성 → 팀원 리뷰 후 Merge Commit |
+| 2 | \`/code 이슈번호\` | 개발자 | 승인된 스펙을 구현·테스트·커밋하고 **PR 초안**을 이슈에 작성 |
+| 3 | \`/review 이슈번호\` | 개발자 | 구현이 스펙에 맞는지, 컨벤션·**오버엔지니어링**은 아닌지 점검, 결과를 이슈에 기록 |
+| 4 | \`/pr 이슈번호\` | 개발자 | 초안으로 PR 생성 → 개발자가 리뷰 후 Merge Commit하면 **기능 완료** |
 
 Claude Code에서는 \`/spec\`, Codex에서는 \`$spec\`(또는 \`/skills\`에서 선택)으로 부르세요.
 
@@ -67,8 +67,8 @@ function nextAction(f) {
     spec: '기획자 컨펌을 기다리고 있습니다. 이슈에서 내용을 확인하고 <code>stage:approved</code> 라벨을 붙이면 승인됩니다.',
     approved: '승인되었습니다. <code>/code ' + f.number + '</code>로 구현을 시작하세요.',
     coding: '구현 중입니다. 끝나면 <code>/review ' + f.number + '</code>를 실행하세요.',
-    review: '리뷰가 기록되었습니다. 필수 수정이 없으면 <code>/pr ' + f.number + '</code>로 PR을 올리세요.',
-    pr: 'PR이 열려 있습니다. 개발자가 리뷰·approve 후 Merge Commit으로 머지하세요.',
+    review: '리뷰가 기록되었습니다. 필수 수정이 없고 규모가 적정이면 <code>/pr ' + f.number + '</code>로 PR을 올리세요.',
+    pr: 'PR이 열려 있습니다. 개발자가 리뷰·approve 후 Merge Commit으로 머지하면 기능이 끝납니다.',
     done: '완료되었습니다.',
   }[f.stage];
 }
