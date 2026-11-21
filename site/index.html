@@ -14,6 +14,7 @@
 <body>
   <section id="login" class="login" hidden>
     <div class="card">
+      <div class="logo big">AI</div>
       <h1>AI 대시보드</h1>
       <p class="sub">솝커톤 iOS 1조 · 역할을 선택하세요</p>
       <button class="btn big" id="login-dev">개발자 · GitHub로 로그인</button>
@@ -25,29 +26,49 @@
   </section>
 
   <header class="top" id="top" hidden>
-    <div>
-      <h1>AI 대시보드</h1>
-      <p class="sub" id="repo"></p>
+    <div class="brand">
+      <div class="logo">AI</div>
+      <div>
+        <h1>Spec Center</h1>
+        <p class="sub" id="repo"></p>
+      </div>
     </div>
-    <nav class="tabs" id="tabs">
-      <button data-tab="features" class="on">기능</button>
-      <button data-tab="prd">PRD</button>
-      <button data-tab="guide">사용법</button>
-      <span class="who" id="who"></span>
-      <button id="logout">로그아웃</button>
+    <nav class="pills" id="tabs">
+      <button data-tab="features" class="pill on">기능</button>
+      <button data-tab="prd" class="pill">PRD</button>
+      <button data-tab="guide" class="pill">사용법</button>
+      <button id="reset" class="pill">필터 초기화</button>
+      <span class="chip" id="who"></span>
+      <button id="logout" class="pill">로그아웃</button>
     </nav>
   </header>
 
   <main id="app" hidden>
     <section id="view-features">
-      <aside class="side">
-        <div class="filters" id="filters"></div>
-        <ul id="list"></ul>
-      </aside>
-      <article id="detail"><p class="empty">왼쪽에서 기능을 선택하세요.</p></article>
+      <div class="stats" id="stats"></div>
+      <div class="layout">
+        <aside class="card side">
+          <h2 class="cap">파이프라인 상태</h2>
+          <ul class="pipe" id="pipe"></ul>
+          <h2 class="cap">빠른 필터</h2>
+          <div class="quick" id="quick"></div>
+        </aside>
+        <section class="card listing">
+          <div class="searchbar">
+            <input id="search" type="search" placeholder="기능 검색 (제목 / 번호)">
+          </div>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>기능</th><th>상태</th><th class="col-who">담당</th><th>PR</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </section>
+        <article class="card detail" id="detail"><p class="empty">왼쪽 목록에서 기능을 선택하세요.</p></article>
+      </div>
     </section>
-    <section id="view-prd" hidden><article class="doc" id="prd"></article></section>
-    <section id="view-guide" hidden><article class="doc" id="guide"></article></section>
+    <section id="view-prd" hidden><article class="card doc" id="prd"></article></section>
+    <section id="view-guide" hidden><article class="card doc" id="guide"></article></section>
   </main>
 
   <footer id="foot"></footer>
